@@ -2,6 +2,8 @@
 import xmltodict
 import urllib
 import StringIO, csv, json
+import models
+from datetime import datetime
 
 def get_politician_presence(politician_id, date_from, date_to):
     url_handler = urllib.urlopen('http://www.camara.gov.br/SitCamaraWS/sessoesreunioes.asmx/'
@@ -35,6 +37,29 @@ def get_politician_presence(politician_id, date_from, date_to):
 
     return politician_presence_formatted
 
+
+def process_database(politician):
+    new_politician = models.Politician(name=politician['nome'],
+                                       party=politician['partido'])
+
+    new_politician.save()
+
+    evento_counter = 0
+    for evento in politician['presenca']:
+        new_evento = models.Presence(
+            politician = new_politician,
+            date = datetime.strptime(evento['data'], '%d/%m/%Y'),
+            is_presente = evento['is_presente'],
+            frequencia_no_dia = evento['frequencia_no_dia'],
+            justificativa = evento['justificativa'],
+            qtde_sessoes = evento['qtde_sessoes']
+        )
+        new_evento.save()
+        evento_counter += 1
+
+    print '    - %s eventos processados' % evento_counter
+
+
 def process_csv_presence(csv_writter, politician):
 
     for evento in politician['presenca']:
@@ -54,7 +79,7 @@ def process_csv_presence(csv_writter, politician):
 
 if __name__ == '__main__':
 
-    print "OPS Crawler - Deputados presença"
+    print "OPS Crawler - Deputados presença - DB"
 
     report_date_from='01/02/2015'
     report_date_to='31/07/2015'
@@ -77,10 +102,7 @@ if __name__ == '__main__':
                                                                     'total': size_deputados,
                                                                     'nome': deputado['nome']}
 
-            process_csv_presence(csv_writter=cw, politician=get_politician_presence(
+            process_database(politician=get_politician_presence(
                 politician_id=deputado['matricula'], date_from=report_date_from, date_to=report_date_to))
 
-            print "OK"
-
-        print file_handler.close()
         print 'Finalizado!'

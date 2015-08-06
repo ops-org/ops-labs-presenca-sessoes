@@ -13,10 +13,10 @@ def get_politician_presence(politician_id, date_from, date_to):
                                                                                        politician_id))
 
     politician_raw_data = url_handler.read()
-    politician_raw_data = politician_raw_data.replace('\\x', '\\u00')  #Fixing encoding issues
+    politician_raw_data = politician_raw_data.replace('\\x', '\\u00')  # Fixing encoding issues
     url_handler.close()
 
-    politician_presence =  xmltodict.parse(politician_raw_data)
+    politician_presence = xmltodict.parse(politician_raw_data)
     politician_presence = politician_presence['parlamentar']
 
     politician_presence_formatted = {
@@ -31,8 +31,25 @@ def get_politician_presence(politician_id, date_from, date_to):
             'is_presente': True if presenca['frequencianoDia'] == u'Presença' else False,
             'frequencia_no_dia': presenca['frequencianoDia'],
             'justificativa': presenca['justificativa'],
-            'qtde_sessoes': presenca['qtdeSessoes']
+            'qtde_sessoes': presenca['qtdeSessoes'],
+            'sessoes': []
         }
+
+        if evento['qtde_sessoes'] == u'1':  #There have cases if have just one item "sessao" will be not an array, so session crashes.
+            sessao = presenca['sessoes']['sessao']
+            sessao_info = {
+                'descricao': sessao['descricao'],
+                'is_presente': True if sessao['frequencia'] == u'Presença' else False,
+            }
+            evento['sessoes'].append(sessao_info)
+        else:
+            for sessao in presenca['sessoes']['sessao']:
+                sessao_info = {
+                    'descricao': sessao['descricao'],
+                    'is_presente': True if sessao['frequencia'] == u'Presença' else False,
+                }
+                evento['sessoes'].append(sessao_info)
+
         politician_presence_formatted['presenca'].append(evento)
 
     return politician_presence_formatted
@@ -47,21 +64,29 @@ def process_database(politician):
     evento_counter = 0
     for evento in politician['presenca']:
         new_evento = models.Presence(
-            politician = new_politician,
-            date = datetime.strptime(evento['data'], '%d/%m/%Y'),
-            is_presente = evento['is_presente'],
-            frequencia_no_dia = evento['frequencia_no_dia'],
-            justificativa = evento['justificativa'],
-            qtde_sessoes = evento['qtde_sessoes']
+            politician=new_politician,
+            date=datetime.strptime(evento['data'], '%d/%m/%Y'),
+            is_presente=evento['is_presente'],
+            frequencia_no_dia=evento['frequencia_no_dia'],
+            justificativa=evento['justificativa'],
+            qtde_sessoes=evento['qtde_sessoes']
         )
         new_evento.save()
+
+        for sessao in evento['sessoes']:
+            new_sessao = models.PresenceSession(
+                presence=new_evento,
+                description=sessao['descricao'],
+                is_presente=sessao['is_presente']
+            )
+            new_sessao.save()
+
         evento_counter += 1
 
     print '    - %s eventos processados' % evento_counter
 
 
 def process_csv_presence(csv_writter, politician):
-
     for evento in politician['presenca']:
         fields = [
             politician['nome'],
@@ -76,19 +101,18 @@ def process_csv_presence(csv_writter, politician):
         csv_writter.writerow([unicode(s).encode("iso-8859-1") for s in fields])
 
 
-
 if __name__ == '__main__':
 
     print "OPS Crawler - Deputados presença - DB"
 
-    report_date_from='01/02/2015'
-    report_date_to='31/07/2015'
+    report_date_from = '01/02/2015'
+    report_date_to = '31/07/2015'
 
     file_handler = open('presenca.csv', 'w')
     cw = csv.writer(file_handler, quotechar='"', quoting=csv.QUOTE_ALL, dialect=csv.excel)
 
-    with open('deputados.xml','r') as raw_file:
-        xml_file = (raw_file.read()).replace('\\x', '\\u00')  #Encoding stuff
+    with open('deputados.xml', 'r') as raw_file:
+        xml_file = (raw_file.read()).replace('\\x', '\\u00')  # Encoding stuff
 
     if xml_file:
         parsed_file = xmltodict.parse(xml_file, process_namespaces=True)
@@ -98,7 +122,7 @@ if __name__ == '__main__':
 
         treated_politicians = []
         for index, deputado in enumerate(deputados):
-            print "Baixando [%(index)s de %(total)s] - %(nome)s" % {'index': index+1,
+            print "Baixando [%(index)s de %(total)s] - %(nome)s" % {'index': index + 1,
                                                                     'total': size_deputados,
                                                                     'nome': deputado['nome']}
 

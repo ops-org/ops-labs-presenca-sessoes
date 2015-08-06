@@ -29,5 +29,15 @@ class Presence(Model):
         database = db
 
 
+class PresenceSession(Model):
+    presence = ForeignKeyField(Presence, related_name='sessions')
+
+    description = CharField(max_length=250)
+    is_presente = BooleanField()
+
+    class Meta:
+        database = db
+
+
 def install_database():
-    db.create_tables([Politician, Presence])
+    db.create_tables([Politician, Presence, PresenceSession])
